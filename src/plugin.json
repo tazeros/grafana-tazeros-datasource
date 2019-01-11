@@ -1,0 +1,29 @@
+{
+	"type": "datasource",
+	"name": "Tazeros",
+	"id": "grafana-tazeros-datasource",
+	"metrics": true,
+	"annotations": false,
+	"info": {
+		"author": {
+			"name": "Tazeros Global Systems",
+			"url": "https://tazeros.com"
+		},
+		"keywords": ["tazeros"],
+		"logos": {
+			"small":"img/logo.svg",
+			"large":"img/logo.svg"
+		},
+		"links": [
+			{"name": "Tazeros", "url": "https://tazeros.com"},
+			{"name": "Privacy Policy", "url": "https://cp.tazeros.com/privacy"}
+		],
+		"screenshots": [],
+		"version": "1.0.0",
+		"updated": "2019-01-01"
+	},
+	"dependencies": {
+		"grafanaVersion": "5.x.x",
+		"plugins": [ ]
+	}
+}
