@@ -1,21 +1,19 @@
 import _ from "lodash";
-import * as CryptoJS from 'crypto-js';
 
 export class TazerosDatasource {
 
      constructor(instanceSettings, $q, backendSrv, templateSrv) {
           this.type = instanceSettings.type;
           this.name = instanceSettings.name;
-          this.token = instanceSettings.jsonData.token;
-          this.encrypt_handshakes = {};
-          this.encrypt_tokens = {};
+          this.token = null;
           this.q = $q;
           this.backendSrv = backendSrv;
           this.templateSrv = templateSrv;
+          this.api_handler = null;
      }
 
      query(options) {
-
+          
           var query = this.buildQueryParameters(options);
           query.targets = query.targets.filter(t => !t.hide);
 
@@ -29,34 +27,40 @@ export class TazerosDatasource {
                query.adhocFilters = [];
           }
 
-          var targets_by_api = {};
-          var promises = [];
-          for (var i = 0; i < query.targets.length; i++) {
-               if (targets_by_api[query.targets[i].api_handler] == undefined) targets_by_api[query.targets[i].api_handler] = [];
-               targets_by_api[query.targets[i].api_handler].push(query.targets[i]);
-          }
-          Object.keys(targets_by_api).forEach((api_handler) => {
-               promises.push(this.request(api_handler, "grafana", "raw", "query", {
-                    data: {
+          let promises = [];
+          for (let i = 0; i < query.targets.length; i++) {
+               promises.push(this.request("auto", "vizs", "data", "aggregate", {
+                    token:query.targets[i].token,
+                    grafana:{
                          maxDataPoints: query.maxDataPoints,
                          range: query.range,
-                         targets: targets_by_api[api_handler]
+                         target: query.targets[i]
                     }
                }));
-          });
+          }
+          
           return new Promise((resolve, reject) => {
                Promise.all(promises).then((responses) => {
-                    var data = [];
-                    for (var _i = 0; _i < responses.length; _i++) {
-                         if (responses[_i].state != undefined && responses[_i].state == 200 && responses[_i].data != undefined) {
-                              for (var j = 0; j < responses[_i].data.length; j++) {
-                                   data.push(responses[_i].data[j]);
+                    
+                    let data = [];
+                    for (let i = 0; i < responses.length; i++) {
+                         if (responses[i] != null && responses[i].state != undefined && responses[i].state == 200 && responses[i].data != undefined) {
+                              
+                              for(let j = 0; j < responses[i].data.length; j++){
+                                   
+                                   data.push({
+                                        target:responses[i].data[j].target,
+                                        datapoints:responses[i].data[j].datapoints
+                                   });
+                                   
                               }
                          }
                     }
+                    
                     resolve({
                          data: data
                     });
+                    
                }).catch((reason) => {
                     reject(reason);
                });
@@ -64,17 +68,17 @@ export class TazerosDatasource {
      }
 
      testDatasource() {
-          return this.request(1, "user", "auth", "token_check", {}).then((response) => {
-               if (response.state === 200 && response.data.id != undefined) {
+          return this.request("auto", "user", "auth", "check", {}).then((user_response) => {
+               if(user_response.state != undefined){
                     return {
                          status: "success",
-                         message: response.data.first_name + ", congratulations! Connection with this token was successfully established.",
+                         message: "Congratulations, connection was successfully established!",
                          title: "Success"
                     };
-               } else {
+               }else{
                     return {
                          status: "error",
-                         message: "Unfortunately, we were unable to establish a connection with this token.",
+                         message: "Unfortunately, we were unable to establish a connection!",
                          title: "Error"
                     };
                }
@@ -87,7 +91,7 @@ export class TazerosDatasource {
                range: options.range,
                annotation: {
                     name: options.annotation.name,
-                    datasource: options.annotation.datasource,
+                    database: options.annotation.database,
                     enable: options.annotation.enable,
                     iconColor: options.annotation.iconColor,
                     query: query
@@ -145,16 +149,12 @@ export class TazerosDatasource {
 
      buildQueryParameters(options) {
           var targets = _.filter(options.targets, (target) => {
-               return !(!target.database || !target.collection || !target.metrics);
+               return !(!target.token);
           });
           var targets = _.map(targets, (target) => {
                return {
                     refId: target.refId,
-                    database: target.database,
-                    collection: target.collection,
-                    metrics: target.metrics,
-                    aggregation: target.aggregation,
-                    api_handler: target.api_handler,
+                    token: target.token,
                     hide: target.hide || false,
                     type: target.type || 'timeserie'
                };
@@ -164,59 +164,64 @@ export class TazerosDatasource {
      }
 
      request(api_handler, module, controller, method, attributes) {
-          if (api_handler < 10) api_handler = "0" + api_handler;
-          if (this.encrypt_handshakes[api_handler] == undefined) {
+          let _this = this;
+          let xhr_promise = function(api_handler, token){
                return new Promise((resolve, reject) => {
-                    this.xhr("GET", "https://api" + api_handler + ".tazeros.com", "").then((response) => {
-                         if (response.encrypt.handshake != undefined) {
-
-                              this.encrypt_handshakes[api_handler] = response.encrypt.handshake;
-                              this.encrypt_tokens[api_handler] = response.encrypt.token;
-
-                              resolve(this.requestSecure(api_handler, module, controller, method, attributes));
-                         }
-                    }).catch((reason) => {
-                         reject(reason);
-                    });
-               });
-          } else {
-               return this.requestSecure(api_handler, module, controller, method, attributes);
-          }
-     }
-
-     requestSecure(api_handler, module, controller, method, attributes) {
-          return new Promise((resolve, reject) => {
-               this.xhr("POST", "https://api" + api_handler + ".tazeros.com/" + module + "/" + controller + "/" + method, CryptoJS.AES.encrypt("module=" + module + "&controller=" + controller + "&method=" + method + "&attributes=" + encodeURIComponent(JSON.stringify(attributes)) + "&cache=0&token=" + this.token, this.encrypt_handshakes[api_handler]).toString() + "|" + this.encrypt_tokens[api_handler]).then((response) => {
-                    if (response.state === 200 && response.response.state === 200) {
-                         resolve(response.response);
-                    } else {
-                         reject("Tazeros API error. Check your token.");
-                    }
-               }).catch((reason) => {
-                    reject(reason);
-               });
-          });
-     }
-     xhr(method, url, data) {
-          return new Promise((resolve, reject) => {
-               var xhr = new XMLHttpRequest();
-               xhr.open(method, url);
-               xhr.onload = function() {
-                    if (this.status >= 200 && this.status < 300) {
-                         try {
-                              resolve(JSON.parse(xhr.responseText));
-                         } catch (e) {
+                    var xhr = new XMLHttpRequest();
+                    xhr.withCredentials = false;
+                    xhr.open("POST", api_handler.trim("/") + "/" + module + "/" + controller + "/" + method);
+                    xhr.onload = function() {
+                         if (this.status >= 200 && this.status < 300) {
+                              try {
+                                   let response = JSON.parse(xhr.responseText);
+                                   resolve(response.response);
+                              } catch (e) {
+                                   reject("Tazeros API internal error.");
+                              }
+                         } else {
                               reject("Tazeros API internal error.");
                          }
-                    } else {
+                    };
+                    xhr.onerror = function() {
                          reject("Tazeros API internal error.");
-                    }
-               };
-               xhr.onerror = function() {
-                    reject("Tazeros API internal error.");
-               };
-               xhr.send(data);
-          });
+                    };
+                    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                    xhr.send("module=" + module + "&controller=" + controller + "&method=" + method + "&token="+token+"&attributes=" + encodeURIComponent(JSON.stringify(attributes)));
+               });
+          };
+          if(api_handler == "auto"){
+               if(_this.api_handler == null){
+                    return new Promise((resolve, reject) => {
+                         var xhr = new XMLHttpRequest();
+                         xhr.open("GET", "https://api.tazeros.com");
+                         xhr.onload = function() {
+                              if (this.status == 200) {
+                                   try {
+                                        let response = JSON.parse(xhr.responseText);
+                                        if(response.api_host != undefined){
+                                             _this.api_handler = response.api_host;
+                                             resolve(xhr_promise(_this.api_handler, _this.token));
+                                        }else{
+                                             reject();
+                                        }
+                                   } catch (e) {
+                                        reject("Tazeros API internal error.");
+                                   }
+                              } else {
+                                   reject("Tazeros API internal error.");
+                              }
+                         };
+                         xhr.onerror = function() {
+                              reject("Tazeros API internal error.");
+                         };
+                         xhr.send();
+                    });
+               }else{
+                    return xhr_promise(_this.api_handler, _this.token);
+               }
+          }else{
+               return xhr_promise(api_handler, _this.token);
+          }
      }
 
 }

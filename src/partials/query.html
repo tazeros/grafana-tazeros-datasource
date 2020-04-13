@@ -1,30 +1,9 @@
 <query-editor-row query-ctrl="ctrl" has-text-edit-mode="false">
 	<div class="gf-form-inline">
-		<div class="gf-form gf-form--grow" ng-show="ctrl.error">
-			<label class="gf-form-label gf-form-label--grow">Tazeros API error. Please check your token and reload page.</label>
-		</div>
-		<div class="gf-form gf-form--grow" ng-show="!ctrl.loaded && !ctrl.error">
-			<label class="gf-form-label gf-form-label--grow">Loading...</label>
-		</div>
-		<div class="gf-form" ng-show="ctrl.loaded">
-			<label class="gf-form-label width-6">Category</label>
-			<div class="gf-form-select-wrapper">
-				<select class="gf-form-input" ng-model="ctrl.target.database" ng-options="v.key as v.name for v in ctrl.databases" ng-change="ctrl.databaseChange()"></select>
-			</div>
-			<label class="gf-form-label width-5">Item</label>
-			<div class="gf-form-select-wrapper">
-				<select class="gf-form-input" ng-model="ctrl.target.collection" ng-options="v.key as v.name for v in ctrl.collections | filter:{database:ctrl.target.database}" ng-change="ctrl.collectionChange()"></select>
-			</div>
-		</div>
-		<div class="gf-form" ng-show="ctrl.loaded">
-			<label class="gf-form-label width-5">Metrics</label>
-			<div class="gf-form-select-wrapper">
-				<select class="gf-form-input" ng-model="ctrl.target.metrics" ng-options="v.key as v.name for v in ctrl.metrics | filter:{database:ctrl.target.database} | filter:{collection:ctrl.target.collection}" ng-change="ctrl.metricsChange()"></select>
-			</div>
-			<label class="gf-form-label width-7" ng-show="ctrl.target.aggregation_need">Aggregation</label>
-			<div class="gf-form-select-wrapper" ng-show="ctrl.target.aggregation_need">
-				<select class="gf-form-input" ng-model="ctrl.target.aggregation" ng-options="v.key as v.name for v in ctrl.aggregations" ng-change="ctrl.aggregationChange()"></select>
-			</div>
+		<div class="gf-form">
+			<input placeholder="Token" class="gf-form-input" ng-model="ctrl.target.token"></input>
+			<button class="btn btn-secondary gf-form-btn" ng-click="ctrl.tokenSave()">Save</button>
+			<label class="gf-form-label">{{ctrl.target.message}}</label>
 		</div>
 	</div>
 </query-editor-row>
